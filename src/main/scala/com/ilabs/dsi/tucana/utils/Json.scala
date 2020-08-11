@@ -1,34 +1,42 @@
 package com.ilabs.dsi.tucana.utils
 
 /**
+  * Single class JSON parser
   * Created by gaoyunxiang on 8/22/15.
   * Modified by samikrc
+  * Updated 30-07-2020
   */
 
+import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.collection.immutable
 
 object Json
 {
 
     /**
       * Incomplete JSON
-      * @param length
+      * @param message
       */
-    case class IncompleteJSONException(val length: Int) extends Exception(s"Parse error: the JSON string might be incomplete!!")
+    case class IncompleteJSONException(val message: String) extends Exception(s"Parse error: the JSON string might be incomplete - $message")
 
     /**
       * Unrecognized characters
       * @param char
       * @param pos
       */
-    case class UnrecognizedCharException(val char: String, val pos: Int) extends Exception(s"Parse error: unrecognized character '$char' at $pos")
+    case class UnrecognizedCharException(val char: String, val pos: Int) extends Exception(s"Parse error: unrecognized character(s) '${char.substring(0, 6)}'... at position $pos - might be incomplete. Check for matching braces.")
 
     object Type extends Enumeration
     {
         val NULL, INT, DOUBLE, BOOLEAN, STRING, ARRAY, OBJECT = Value
     }
 
-    class Value(input_value: Any)
+    /**
+      * Encapsulates a JSON structure from any of the supported data type.
+      * @param inputValue
+      */
+    class Value(inputValue: Any)
     {
 
         def asInt: Int = value match
@@ -66,38 +74,51 @@ object Json
 
         def apply(key: String): Value = value.asInstanceOf[Map[String, Value]](key)
 
+        /**
+          * Method to write this object as JSON string.
+          * @return
+          */
         def write: String =
         {
             val buffer = new mutable.StringBuilder()
-            rec_write(buffer)
+            recWrite(buffer)
             buffer.toString()
         }
 
+        /**
+          * Method to write this object as JSON string, ending with newline.
+          * @return
+          */
         def writeln: String = s"${write}\n"
 
-        private val value: Any = input_value match
+        private val value: Any = inputValue match
         {
             case null => null
             case v: Int => v.toLong
-            case v: Long => input_value
-            case v: Double => input_value
-            case v: Boolean => input_value
-            case v: String => input_value
-            case v: Value => v.value
-            case v: Map[_, _] =>
-                v.map
-                { case one =>
-                    (one._1.toString, Value(one._2))
-                }
-            case v: Vector[_] => v.map(Value(_)).toArray
-            case v: List[_] => v.map(Value(_)).toArray
+            case _: Long => inputValue
+            case _: Double => inputValue
+            case _: Boolean => inputValue
+            case _: String => inputValue
+            // Adding Float: up-converting to double
+            case v: Float => v.toDouble
+            case v: Map[_, _] => v.map{ case (k, v) => (k.toString, Value(v)) }
+            // Adding mutable map classes
+            // Need separate entry for LinkedHashMap, otherwise we loose type.
+            case v: mutable.LinkedHashMap[_,_] => v.map{ case (k, v) => (k.toString, Value(v)) }
+            case v: mutable.Map[_, _] => v.map{ case (k, v) => (k.toString, Value(v)) }
+            // Adding mutable and immutable collection classes
+            case v: mutable.Iterable[_] => v.map(Value(_)).toArray
+            case v: immutable.Iterable[_] => v.map(Value(_)).toArray
+            //case v: Vector[_] => v.map(Value(_)).toArray
+            //case v: List[_] => v.map(Value(_)).toArray
             case v: Array[_] => v.map(Value(_))
             case v: Iterator[_] => v.map(Value(_)).toArray
 
-            case _ => throw new Exception("unknow type")
+            case v: Value => v.value
+            case _ => throw new Exception("Unknown type")
         }
 
-        private def rec_write(buffer: mutable.StringBuilder): Unit =
+        private def recWrite(buffer: mutable.StringBuilder): Unit =
         {
             value match
             {
@@ -111,13 +132,9 @@ object Json
                     {
                         each =>
                         {
-                            if (each == '\\')
+                            if (each == '\\' || each == '"')
                             {
                                 buffer.append('\\')
-                            }
-                            else if(each == '"')
-                            {
-                                buffer.append("\\\"")
                             }
                             else if (each == '\b')
                             {
@@ -154,7 +171,7 @@ object Json
                         {
                             buffer.append(',')
                         }
-                        v(i).asInstanceOf[Value].rec_write(buffer)
+                        v(i).asInstanceOf[Value].recWrite(buffer)
                     }
                     buffer.append(']')
                 case v: Map[_, _] =>
@@ -172,10 +189,28 @@ object Json
                             buffer.append(one._1)
                             buffer.append('"')
                             buffer.append(':')
-                            one._2.asInstanceOf[Value].rec_write(buffer)
+                            one._2.asInstanceOf[Value].recWrite(buffer)
                     }
                     buffer.append('}')
-                case _ => throw new Exception("unknow data type")
+                case v: mutable.LinkedHashMap[_, _] =>
+                    buffer.append('{')
+                    var first = true
+                    v.foreach
+                    {
+                        case one =>
+                            if (!first)
+                            {
+                                buffer.append(',')
+                            }
+                            first = false
+                            buffer.append('"')
+                            buffer.append(one._1)
+                            buffer.append('"')
+                            buffer.append(':')
+                            one._2.asInstanceOf[Value].recWrite(buffer)
+                    }
+                    buffer.append('}')
+                case _ => throw new Exception("Unknown data type")
             }
         }
 
@@ -187,6 +222,33 @@ object Json
             else if(this.isString) this.asString
             else if(this.isArray || this.isMap) super.toString
             else this.asLong.toString
+        }
+
+        /**
+          * Method to get the Json.Value object given a path in x.y.z format. Only works for
+          * successive maps with keys as "x", "y", "z" etc.
+          * @param path
+          * @return
+          */
+        def get(path: String): Json.Value =
+        {
+            @tailrec
+            def getVal(map: Map[String, Value], parts: List[String]): Value =
+            {
+                if(parts.length == 1)
+                    map(parts(0))
+                else
+                    getVal(map(parts(0)).asMap, parts.splitAt(1)._2)
+                /*
+                // Not sure how to do below elegantly!!
+                parts match
+                {
+                    case h::t => getVal(map(h).asMap, t)
+                    case _ => map(parts(0))
+                }
+                */
+            }
+            getVal(this.asMap, path.split('.').toList)
         }
     }
 
@@ -225,7 +287,7 @@ object Json
                 }
                 if (sta.isEmpty || sta.last._1 != '[')
                 {
-                    throw new Exception("parse error, [] not match")
+                    throw new IncompleteJSONException("[] does not match")
                 }
                 sta.trimEnd(1)
                 sta.append(('a', vec.iterator))
@@ -244,7 +306,7 @@ object Json
                 }
                 if (sta.isEmpty || sta.last._1 != '{')
                 {
-                    throw new Exception("parse error, {} not match")
+                    throw new IncompleteJSONException("{} does not match")
                 }
                 sta.trimEnd(1)
                 sta.append(('o', now.toMap))
@@ -351,8 +413,9 @@ object Json
         }
         if (sta.length != 1)
         {
-            throw new IncompleteJSONException(sta.length)
+            throw new IncompleteJSONException("Unknown parsing error")
         }
         Value(sta.head._2)
     }
+
 }

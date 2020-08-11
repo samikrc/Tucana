@@ -3,7 +3,6 @@ package com.ilabs.dsi.tucana
 import com.ilabs.dsi.tucana.utils.Json
 
 import scala.collection.immutable
-import scala.util.parsing.json.JSONArray
 
 /**
   * Helper class for processing POST data.
@@ -13,6 +12,7 @@ class WebInput(input: Map[String, Json.Value])
 {
     /**
       * Constructor accepting a JSON string
+      *
       * @param body
       * @return
       */
@@ -25,18 +25,22 @@ class WebInput(input: Map[String, Json.Value])
       * @return A sequence of parameters that are required but missing.
       */
     def required(params: List[String]): immutable.Seq[String] =
-        for{ param <- params if (!input.contains(param)) } yield param
+        for
+            {param <- params if (!input.contains(param))} yield param
 
-    def get():Map[String,Json.Value] = {
+    def get(): Map[String, Json.Value] =
+    {
         return input
     }
 
-    def get(key:String):String={
-        val temp = input.getOrElse(key,"")
-        return input.getOrElse(key,"").toString
+    def get(key: String): String =
+    {
+        val temp = input.getOrElse(key, "")
+        return input.getOrElse(key, "").toString
     }
 
-    def getList(key:String)={
+    def getList(key: String) =
+    {
     }
 
     /**
@@ -49,7 +53,8 @@ class WebInput(input: Map[String, Json.Value])
     {
         input.getOrElse(key, "") match
         {
-            case value: Json.Value => if (value.isNumeric) value.asLong.toString else value.asString
+            case value: Json.Value => if (value.isNumeric) value.asLong.toString
+            else value.asString
             case value: Any => value.toString
         }
     }
