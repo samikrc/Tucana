@@ -1,5 +1,5 @@
 # Tucana
-Originally a project from the Data Science Engineering team at [24]7.ai, this project creats a service for deploying a combination of Spark models using [Mleap technology](https://github.com/combust/mleap) and generic rules (in Javascript or Python) in production. The library is built on top of [akka-http](https://doc.akka.io/docs/akka-http/current/index.html). Currently, the server supports two operations: returning the predicted class with maximum probability and top N classes and their probabilities.
+Originally a project from the Data Science Engineering team at [24]7.ai, this project creates a service for deploying a combination of Spark models using [Mleap technology](https://github.com/combust/mleap) and generic rules (in Javascript or Python) in production. The library is built on top of [akka-http](https://doc.akka.io/docs/akka-http/current/index.html). Currently, the server supports two operations: returning the predicted class with maximum probability and top N classes and their probabilities.
 
 This is a companion project to [FlashML](https://github.com/247-ai/FlashML), a library for training models on Apache Spark. Tucana provides mleap artifacts for the custom transformers that are provided in FlashML. 
 
